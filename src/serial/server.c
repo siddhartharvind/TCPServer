@@ -60,5 +60,25 @@ int main(int argc, char *argv[])
 
     puts("Server successfully listening!\nWaiting for incoming connections...");
 
+
+
+    // 4. Accept connections
+    struct sockaddr_in client_addr;
+    int client_len = sizeof client_addr;
+
+    int new_socketfd = accept(
+        socket_fd,
+        (struct sockaddr *)&client_addr,
+        (socklen_t *)&client_len
+    );
+
+    if (new_socketfd < 0)
+    {
+        perror("ERROR: Server failed to accept connection");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Connection with %d successfully established!\n", new_socketfd);
+
     return EXIT_SUCCESS;
 }
