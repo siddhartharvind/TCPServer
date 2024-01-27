@@ -80,5 +80,11 @@ int main(int argc, char *argv[])
 
     printf("Connection with %d successfully established!\n", new_socketfd);
 
+
+
+    // 5A. Send data to client
+    char *message = "Hello connection!\n";
+    send(new_socketfd, message, strlen(message), 0);
+
     return EXIT_SUCCESS;
 }
