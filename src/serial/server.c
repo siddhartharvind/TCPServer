@@ -85,7 +85,22 @@ int main(int argc, char *argv[])
         // 5B. Receive data from client
         char client_message[255];
 
-        int read_size = recv(new_socketfd, &client_message, sizeof client_message, 0);
+        int read_size;
+
+        while ((read_size = recv(
+            new_socketfd,
+            &client_message,
+            sizeof client_message,
+            0
+        )) > 0)
+        {
+            // Remove trailing newline -> '\n' or '\r\n'
+            // strcspn() -> returns first index of '\r' or '\n'
+            // By setting to '\0' => effectively remove from string
+            int msg_len = strcspn(client_message, "\r\n");
+            client_message[msg_len] = '\0';
+            dprintf(new_socketfd, "You said: \"%*s\"\n", msg_len, client_message);
+        }
 
         if (read_size == 0)
         {
@@ -96,16 +111,7 @@ int main(int argc, char *argv[])
         {
             perror("ERROR: recv() failed");
             exit(EXIT_FAILURE);
-        }
-        else
-        {
-            // Remove trailing newline -> '\n' or '\r\n'
-            // strcspn() -> returns first index of '\r' or '\n'
-            // By setting to '\0' => effectively remove from string
-            int msg_len = strcspn(client_message, "\r\n");
-            client_message[msg_len] = '\0';
-            dprintf(new_socketfd, "You said: \"%*s\"\n", msg_len, client_message);
-        }
+        }   
     }
 
     if (new_socketfd < 0)
