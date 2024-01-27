@@ -49,5 +49,16 @@ int main(int argc, char *argv[])
 
     puts("Server successfully bound!");
 
+
+
+    // 3. Listen for connections
+    if (listen(socket_fd, 5) < 0)
+    {
+        perror("ERROR: Server unable to listen on port");
+        exit(EXIT_FAILURE);
+    }
+
+    puts("Server successfully listening!\nWaiting for incoming connections...");
+
     return EXIT_SUCCESS;
 }
