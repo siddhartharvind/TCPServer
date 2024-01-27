@@ -83,8 +83,32 @@ int main(int argc, char *argv[])
 
 
     // 5A. Send data to client
-    char *message = "Hello connection!\n";
+    char *message = "Hello connection! Enter something:\n";
     send(new_socketfd, message, strlen(message), 0);
+
+
+    // 5B. Receive data from client
+    char client_message[255];
+
+    int read_size = recv(new_socketfd, &client_message, sizeof client_message, 0);
+
+    if (read_size == 0)
+    {
+        puts("Client disconnected.");
+        fflush(stdout);
+    }
+    else if (read_size < 0)
+    {
+        perror("ERROR: recv() failed");
+        exit(EXIT_FAILURE);
+    }
+    else
+    {
+        int msg_len = strcspn(client_message, "\r\n");
+        client_message[msg_len] = '\0';
+        dprintf(new_socketfd, "You said: \"%*s\"\n", msg_len, client_message);
+    }
+
 
     return EXIT_SUCCESS;
 }
