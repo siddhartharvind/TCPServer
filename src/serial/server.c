@@ -8,6 +8,18 @@
 
 int main(int argc, char *argv[])
 {
+
+    static const char * const database[] = {
+        [0] = "jumps",
+        [1] = "dog",
+        [2] = "the",
+        [3] = "lazy",
+        [4] = "quick",
+        [5] = "over",
+        [6] = "fox",
+        [7] = "brown"
+    };
+
     // 1. Create a socket
     int socket_fd = socket(
         AF_INET,     /* domain: IPv4 */
@@ -99,7 +111,18 @@ int main(int argc, char *argv[])
             // By setting to '\0' => effectively remove from string
             int msg_len = strcspn(client_message, "\r\n");
             client_message[msg_len] = '\0';
-            dprintf(new_socketfd, "You said: \"%*s\"\n", msg_len, client_message);
+
+            const char *delim = " ";
+
+            char *command = strtok(client_message, delim);
+            if (strcmp(command, "READ") == 0)
+            {
+                char *key_string = strtok(NULL, delim);
+                int key = strtol(key_string, NULL, 10);
+                dprintf(new_socketfd, "Your string: \"%*s\"\n", msg_len, database[key]);
+            }
+
+            // dprintf(new_socketfd, "You said: \"%*s\"\n", msg_len, client_message);
         }
 
         if (read_size == 0)
