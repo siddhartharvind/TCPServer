@@ -96,7 +96,6 @@ int main(int argc, char *argv[])
 
         // 5B. Receive data from client
         char client_message[255];
-
         int read_size;
 
         while ((read_size = recv(
@@ -106,6 +105,7 @@ int main(int argc, char *argv[])
             0
         )) > 0)
         {
+            /*
             // Remove trailing newline -> '\n' or '\r\n'
             // strcspn() -> returns first index of '\r' or '\n'
             // By setting to '\0' => effectively remove from string
@@ -121,10 +121,60 @@ int main(int argc, char *argv[])
                 int key = strtol(key_string, NULL, 10);
                 dprintf(new_socketfd, "Your string: \"%*s\"\n", msg_len, database[key]);
             }
+            */
+
+            static const char *const commands[] = {
+                "READ",
+                "WRITE",
+                "COUNT",
+                "DELETE",
+                "END",
+                NULL
+            };
+
+            char command[7]; // [len(DELETE) = 6] + '\0'
+            char key[32];
+            char value[32];
+
+            // Message format: <whitespace>*READ<whitespace>*<newline>
+            static const char *const whitespace = " \r\t";
+            static const char *const newline    = "\n"; // using netcat; for telnet: "\r\n"
+
+            // Replace newline with NUL ('\0')
+            int msg_len = strcspn(client_message, newline);
+            client_message[msg_len] = '\0';
+
+            for (int i = 0; commands[i] != NULL; ++i)
+            {
+                if (strncmp(client_message, commands[i], (sizeof commands[i])-1) == 0)
+                {
+                    strncpy(command, commands[i], (sizeof command) - 1);
+                    read_size = recv(
+                        new_socketfd,
+                        &client_message,
+                        sizeof client_message,
+                        0
+                    );
+                    if (read_size <= 0) {
+                        goto recv_error;
+                    }
+                    strncpy(key, client_message, (sizeof key)-1);
+
+                    int key_ = atoi(key);
+
+                    strncpy(value, database[(int) key_], (sizeof value)-1);
+
+                    dprintf(new_socketfd,
+                        "Requested value: \"%*s\"\n", (int)strlen(value), value);
+
+                    break;
+                }
+            }
 
             // dprintf(new_socketfd, "You said: \"%*s\"\n", msg_len, client_message);
         }
 
+    recv_error:
         if (read_size == 0)
         {
             puts("Client disconnected.");
