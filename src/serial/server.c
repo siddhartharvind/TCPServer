@@ -76,13 +76,13 @@ int main(int argc, char *argv[])
 
     // 4. Accept connections
     struct sockaddr_in client_addr;
-    int client_len = sizeof client_addr;
+    socklen_t client_socklen = sizeof client_addr;
 
     int new_socketfd;
     while ((new_socketfd = accept(
         socket_fd,
         (struct sockaddr *)&client_addr,
-        (socklen_t *)&client_len
+        &client_socklen
     )) > 0)
     {
 
@@ -105,23 +105,15 @@ int main(int argc, char *argv[])
             0
         )) > 0)
         {
-            /*
-            // Remove trailing newline -> '\n' or '\r\n'
-            // strcspn() -> returns first index of '\r' or '\n'
-            // By setting to '\0' => effectively remove from string
-            int msg_len = strcspn(client_message, "\r\n");
-            client_message[msg_len] = '\0';
 
-            const char *delim = " ";
-
-            char *command = strtok(client_message, delim);
-            if (strcmp(command, "READ") == 0)
-            {
-                char *key_string = strtok(NULL, delim);
-                int key = strtol(key_string, NULL, 10);
-                dprintf(new_socketfd, "Your string: \"%*s\"\n", msg_len, database[key]);
+            if (read_size == 1) {
+                // Only character read is '\n'
+                // No need for further action.
+                continue; // while loop
             }
-            */
+
+            // Zero out '\n' character at position (read_size-1)
+            client_message[read_size-1] = '\0';
 
             static const char *const commands[] = {
                 "READ",
@@ -132,49 +124,62 @@ int main(int argc, char *argv[])
                 NULL
             };
 
-            char command[7]; // [len(DELETE) = 6] + '\0'
-            char key[32];
-            char value[32];
-
-            // Message format: <whitespace>*READ<whitespace>*<newline>
-            static const char *const whitespace = " \r\t";
-            static const char *const newline    = "\n"; // using netcat; for telnet: "\r\n"
-
-            // Replace newline with NUL ('\0')
-            int msg_len = strcspn(client_message, newline);
-            client_message[msg_len] = '\0';
-
-            for (int i = 0; commands[i] != NULL; ++i)
-            {
-                if (strncmp(client_message, commands[i], (sizeof commands[i])-1) == 0)
+            char first_char = client_message[0];
+            switch (first_char) {
+                case 'R':
+                case 'W':
+                case 'C':
+                case 'D':
+                case 'E':
+                // For cases: 'R' | 'W' | 'C' | 'D' | 'E'
                 {
-                    strncpy(command, commands[i], (sizeof command) - 1);
-                    read_size = recv(
-                        new_socketfd,
-                        &client_message,
-                        sizeof client_message,
-                        0
-                    );
-                    if (read_size <= 0) {
-                        goto recv_error;
+                    // **NOTE**: the below for loop works only as long as
+                    // the protocol's commands all start with different
+                    // characters.
+                    const char *command;
+                    for (int i = 0; commands[i] != NULL; ++i) {
+                        if (commands[i][0] == first_char) {
+                            command = commands[i];
+                            break;
+                        }
                     }
-                    strncpy(key, client_message, (sizeof key)-1);
 
-                    int key_ = atoi(key);
+                    // The reason for the double check (for loop to look
+                    // up the command full name + strcmp()) is that using
+                    // the first character as the index, like:
+                    //     commands[] = { ['R'] = "READ", ... }
+                    // inflates the size of the array drastically.
+                    if (strcmp(client_message, command) == 0) {
+                        // (sizeof command)-1 => '-1' for NUL character
+                        read_size = recv(
+                            new_socketfd,
+                            &client_message,
+                            sizeof client_message,
+                            0
+                        );
+                        if (read_size <= 0) {
+                            break; // out of while (read_size > 0)
+                        }
 
-                    strncpy(value, database[(int) key_], (sizeof value)-1);
+                        client_message[read_size-1] = '\0';
+                        char key_str[32];
+                        strncpy(key_str, client_message, read_size);
+                        // we copy over `read_size` chars to include the NUL terminator
+                        int key = atoi(key_str);
+                        const char *value = database[key];
 
-                    dprintf(new_socketfd,
-                        "Requested value: \"%*s\"\n", (int)strlen(value), value);
+                        dprintf(new_socketfd, "Requested value: \"%*s\"\n",
+                            (int)strlen(value), value);
 
-                    break;
+                        break; // from case 'RWCDE'
+                    }
                 }
+                default:
+                    continue; // while loop
             }
 
-            // dprintf(new_socketfd, "You said: \"%*s\"\n", msg_len, client_message);
         }
 
-    recv_error:
         if (read_size == 0)
         {
             puts("Client disconnected.");
