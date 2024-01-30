@@ -1,29 +1,17 @@
 #include <arpa/inet.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <netinet/in.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <string>
 #include <sys/socket.h>
+#include <unordered_map>
 
 
 int main(int argc, char *argv[])
 {
 
-    /*static const char *const database[] = {
-        [0] = "jumps",
-        [1] = "dog",
-        [2] = "the",
-        [3] = "lazy",
-        [4] = "quick",
-        [5] = "over",
-        [6] = "fox",
-        [7] = "brown"
-    };*/
-    enum {
-        DATABASE_LEN = 8,
-        MAX_VALUE_LEN = 32
-    };
-    static char database[DATABASE_LEN][MAX_VALUE_LEN] = {0};
+    static std::unordered_map<std::string, std::string> KV_DATASTORE;
 
     // 1. Create a socket
     int socket_fd = socket(
@@ -35,11 +23,11 @@ int main(int argc, char *argv[])
 
     if (socket_fd < 0)
     {
-        perror("ERROR: Could not create socket");
-        exit(EXIT_FAILURE);
+        std::perror("ERROR: Could not create socket");
+        std::exit(EXIT_FAILURE);
     }
 
-    printf("Socket successfully created: %d\n", socket_fd);
+    std::printf("Socket successfully created: %d\n", socket_fd);
 
 
 
@@ -47,7 +35,7 @@ int main(int argc, char *argv[])
     struct sockaddr_in server;
 
     // Zero out the struct
-    memset(&server, 0, sizeof server);
+    std::memset(&server, 0, sizeof server);
 
     // Prepare the structure
     server.sin_family      = AF_INET;
@@ -60,22 +48,22 @@ int main(int argc, char *argv[])
 
     if (bind(socket_fd, (struct sockaddr *)&server, sizeof server) < 0)
     {
-        perror("ERROR: Failed to bind socket");
-        exit(EXIT_FAILURE);
+        std::perror("ERROR: Failed to bind socket");
+        std::exit(EXIT_FAILURE);
     }
 
-    puts("Server successfully bound!");
+    std::puts("Server successfully bound!");
 
 
 
     // 3. Listen for connections
     if (listen(socket_fd, 5) < 0)
     {
-        perror("ERROR: Server unable to listen on port");
-        exit(EXIT_FAILURE);
+        std::perror("ERROR: Server unable to listen on port");
+        std::exit(EXIT_FAILURE);
     }
 
-    puts("Server successfully listening!\nWaiting for incoming connections...");
+    std::puts("Server successfully listening!\nWaiting for incoming connections...");
 
 
 
@@ -91,12 +79,12 @@ int main(int argc, char *argv[])
     )) > 0)
     {
 
-        printf("Connection with %d successfully established!\n", new_socketfd);
+        std::printf("Connection with %d successfully established!\n", new_socketfd);
 
 
         // 5A. Send data to client
-        char *message = "Hello connection! Enter something:\n";
-        send(new_socketfd, message, strlen(message), 0);
+        const char *message = "Hello connection! Enter something:\n";
+        send(new_socketfd, message, std::std::strlen(message), 0);
 
 
         // 5B. Receive data from client
@@ -138,7 +126,7 @@ int main(int argc, char *argv[])
                 const char *value;
 
                 case 'R':
-                    if (strcmp(client_message, "READ") == 0) {
+                    if (std::strcmp(client_message, "READ") == 0) {
                         read_size = recv(
                             new_socketfd,
                             &client_message,
@@ -149,18 +137,18 @@ int main(int argc, char *argv[])
                             break; // out of switch => goes to if (read_size) ...
                         }
                         client_message[read_size-1] = '\0';
-                        strncpy(key_str, client_message, read_size);
+                        std::strncpy(key_str, client_message, read_size);
                         // we copy over `read_size` chars to include the NUL terminator
                         key = atoi(key_str);
                         value = database[key];
 
                         dprintf(new_socketfd, "Requested value: \"%*s\"\n",
-                            (int)strlen(value), value);
+                            (int)std::std::strlen(value), value);
                     }
                     break; // out of switch
 
                 case 'W':
-                    if (strcmp(client_message, "WRITE") == 0) {
+                    if (std::strcmp(client_message, "WRITE") == 0) {
                         read_size = recv(
                             new_socketfd,
                             &client_message,
@@ -171,7 +159,7 @@ int main(int argc, char *argv[])
                             break; // out of switch => goes to if (read_size) ...
                         }
                         client_message[read_size-1] = '\0';
-                        strncpy(key_str, client_message, read_size);
+                        std::strncpy(key_str, client_message, read_size);
                         // we copy over `read_size` chars to include the NUL terminator
                         key = atoi(key_str);
 
@@ -192,9 +180,9 @@ int main(int argc, char *argv[])
                             continue; // while loop
                         }
                         value = client_message + 1; // skip the ':'
-                        int value_len = strlen(value);
+                        int value_len = std::std::strlen(value);
                         // Copy only (MAX_VALUE_LEN-1) bytes to database
-                        strncpy(database[key], value, MAX_VALUE_LEN-1);
+                        std::strncpy(database[key], value, MAX_VALUE_LEN-1);
 
                         if (value_len < MAX_VALUE_LEN) {
                             // Set byte after copied bytes to NUL
@@ -206,17 +194,17 @@ int main(int argc, char *argv[])
                     break; // out of switch
 
                 case 'C':
-                    if (strcmp(client_message, "COUNT") == 0) {
+                    if (std::strcmp(client_message, "COUNT") == 0) {
                     }
                     break; // out of switch
 
                 case 'D':
-                    if (strcmp(client_message, "DELETE") == 0) {
+                    if (std::strcmp(client_message, "DELETE") == 0) {
                     }
                     break; // out of switch
 
                 case 'E':
-                    if (strcmp(client_message, "END") == 0) {
+                    if (std::strcmp(client_message, "END") == 0) {
                     }
                     break; // out of switch
 
@@ -260,20 +248,20 @@ int main(int argc, char *argv[])
 
         if (read_size == 0)
         {
-            puts("Client disconnected.");
-            fflush(stdout);
+            std::puts("Client disconnected.");
+            std::fflush(stdout);
         }
         else if (read_size < 0)
         {
-            perror("ERROR: recv() failed");
-            exit(EXIT_FAILURE);
+            std::perror("ERROR: recv() failed");
+            std::exit(EXIT_FAILURE);
         }   
     }
 
     if (new_socketfd < 0)
     {
-        perror("ERROR: Server failed to accept connection");
-        exit(EXIT_FAILURE);
+        std::perror("ERROR: Server failed to accept connection");
+        std::exit(EXIT_FAILURE);
     }
 
 
