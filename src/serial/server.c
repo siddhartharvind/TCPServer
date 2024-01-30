@@ -9,7 +9,7 @@
 int main(int argc, char *argv[])
 {
 
-    static const char * const database[] = {
+    /*static const char *const database[] = {
         [0] = "jumps",
         [1] = "dog",
         [2] = "the",
@@ -18,7 +18,12 @@ int main(int argc, char *argv[])
         [5] = "over",
         [6] = "fox",
         [7] = "brown"
+    };*/
+    enum {
+        DATABASE_LEN = 8,
+        MAX_VALUE_LEN = 32
     };
+    static char database[DATABASE_LEN][MAX_VALUE_LEN] = {0};
 
     // 1. Create a socket
     int socket_fd = socket(
@@ -125,32 +130,105 @@ int main(int argc, char *argv[])
             };
 
             char first_char = client_message[0];
-            switch (first_char) {
+            switch (first_char)
+            {
+
+                char key_str[32];
+                int key;
+                const char *value;
+
                 case 'R':
-                case 'W':
-                case 'C':
-                case 'D':
-                case 'E':
-                // For cases: 'R' | 'W' | 'C' | 'D' | 'E'
-                {
-                    // **NOTE**: the below for loop works only as long as
-                    // the protocol's commands all start with different
-                    // characters.
-                    const char *command;
-                    for (int i = 0; commands[i] != NULL; ++i) {
-                        if (commands[i][0] == first_char) {
-                            command = commands[i];
-                            break;
+                    if (strcmp(client_message, "READ") == 0) {
+                        read_size = recv(
+                            new_socketfd,
+                            &client_message,
+                            sizeof client_message,
+                            0
+                        );
+                        if (read_size <= 0) {
+                            break; // out of switch => goes to if (read_size) ...
                         }
+                        client_message[read_size-1] = '\0';
+                        strncpy(key_str, client_message, read_size);
+                        // we copy over `read_size` chars to include the NUL terminator
+                        key = atoi(key_str);
+                        value = database[key];
+
+                        dprintf(new_socketfd, "Requested value: \"%*s\"\n",
+                            (int)strlen(value), value);
                     }
+                    break; // out of switch
+
+                case 'W':
+                    if (strcmp(client_message, "WRITE") == 0) {
+                        read_size = recv(
+                            new_socketfd,
+                            &client_message,
+                            sizeof client_message,
+                            0
+                        );
+                        if (read_size <= 0) {
+                            break; // out of switch => goes to if (read_size) ...
+                        }
+                        client_message[read_size-1] = '\0';
+                        strncpy(key_str, client_message, read_size);
+                        // we copy over `read_size` chars to include the NUL terminator
+                        key = atoi(key_str);
+
+                        // Reading value to be written to key
+                        read_size = recv(
+                            new_socketfd,
+                            &client_message,
+                            sizeof client_message,
+                            0
+                        );
+                        if (read_size <= 0) {
+                            break; // out of switch => goes to if (read_size) ...
+                        }
+                        client_message[read_size-1] = '\0';
+                        if (client_message[0] != ':' ) {
+                            // start of value indicated by ':'
+                            // format <KEY><newline>:<VALUE><newline>
+                            continue; // while loop
+                        }
+                        value = client_message + 1; // skip the ':'
+                        int value_len = strlen(value);
+                        // Copy only (MAX_VALUE_LEN-1) bytes to database
+                        strncpy(database[key], value, MAX_VALUE_LEN-1);
+
+                        if (value_len < MAX_VALUE_LEN) {
+                            // Set byte after copied bytes to NUL
+                            database[key][value_len] = '\0';
+                        }
+                        // Set last byte to NUL terminator as well
+                        database[key][MAX_VALUE_LEN-1] = '\0';
+                    }
+                    break; // out of switch
+
+                case 'C':
+                    if (strcmp(client_message, "COUNT") == 0) {
+                    }
+                    break; // out of switch
+
+                case 'D':
+                    if (strcmp(client_message, "DELETE") == 0) {
+                    }
+                    break; // out of switch
+
+                case 'E':
+                    if (strcmp(client_message, "END") == 0) {
+                    }
+                    break; // out of switch
 
                     // The reason for the double check (for loop to look
                     // up the command full name + strcmp()) is that using
                     // the first character as the index, like:
                     //     commands[] = { ['R'] = "READ", ... }
                     // inflates the size of the array drastically.
-                    if (strcmp(client_message, command) == 0) {
+                    /*
+                    if (strcmp(client_message, command_str) == 0) {
                         // (sizeof command)-1 => '-1' for NUL character
+
                         read_size = recv(
                             new_socketfd,
                             &client_message,
@@ -173,12 +251,12 @@ int main(int argc, char *argv[])
 
                         break; // from case 'RWCDE'
                     }
-                }
+                    */
                 default:
                     continue; // while loop
-            }
 
-        }
+            } // end switch
+        } // end while
 
         if (read_size == 0)
         {
