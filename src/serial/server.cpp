@@ -203,6 +203,26 @@ int main(int argc, char *argv[])
 
                 case 'D':
                     if (std::strcmp(client_message, "DELETE") == 0) {
+                        read_size = recv(
+                            new_socketfd,
+                            &client_message,
+                            sizeof client_message,
+                            0
+                        );
+                        if (read_size <= 0) {
+                            break; // out of switch => goes to if (read_size) ...
+                        }
+                        client_message[read_size-1] = '\0';
+                        key = client_message;
+                        auto key_found = KV_DATASTORE.erase(key);
+                        // .erase():
+                        //  takes     returns the no. of keys erased
+                        if (key_found) {
+                            dprintf(new_socketfd, "Deleted key \"%*s\"\n",
+                                (int)key.length(), key.c_str());
+                        } else {
+                            dprintf(new_socketfd, "Key not found.\n");
+                        }
                     }
                     break; // out of switch
 
