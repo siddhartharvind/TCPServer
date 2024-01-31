@@ -5,6 +5,7 @@
 #include <netinet/in.h>
 #include <string>
 #include <sys/socket.h>
+#include <unistd.h>
 #include <unordered_map>
 
 
@@ -228,15 +229,26 @@ int main(int argc, char *argv[])
 
                 case 'E':
                     if (std::strcmp(client_message, "END") == 0) {
+
+                        // Close the client socket FD.
+                        if (close(new_socketfd) < 0) {
+                            std::perror("ERROR: close() on client");
+                            std::exit(EXIT_FAILURE);
+                        }
+                        read_size = 0; // for the `if` at label `after_recv:`
+                        goto after_recv;
+                        // break;
+                        // No break needed here as the `goto` makes the PC
+                        // jump out of the `while(recv())` loop itself.
                     }
-                    break; // out of switch
 
                 default:
                     continue; // while loop
 
             } // end switch
-        } // end while
+        } // end while(recv())
 
+    after_recv:
         if (read_size == 0)
         {
             std::puts("Client disconnected.");
@@ -246,8 +258,13 @@ int main(int argc, char *argv[])
         {
             std::perror("ERROR: recv() failed");
             std::exit(EXIT_FAILURE);
-        }   
-    }
+        }
+
+        // The server will remain in the `accept()` while loop
+        // even after a client ends its connection and control
+        // reaches this point.
+
+    } // end `while(accept())`
 
     if (new_socketfd < 0)
     {
