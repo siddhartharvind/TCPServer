@@ -1,9 +1,9 @@
-CC=gcc
-CFLAGS=
+CXX=gcc
+CXXFLAGS=
 
 all: server
-server: server.c
-	$(CC) $(CFLAGS) -o $@ $<
+server: server.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $<
 
 
 .PHONY: clean

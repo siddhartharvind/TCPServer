@@ -193,38 +193,6 @@ int main(int argc, char *argv[])
                     }
                     break; // out of switch
 
-                    // The reason for the double check (for loop to look
-                    // up the command full name + strcmp()) is that using
-                    // the first character as the index, like:
-                    //     commands[] = { ['R'] = "READ", ... }
-                    // inflates the size of the array drastically.
-                    /*
-                    if (strcmp(client_message, command_str) == 0) {
-                        // (sizeof command)-1 => '-1' for NUL character
-
-                        read_size = recv(
-                            new_socketfd,
-                            &client_message,
-                            sizeof client_message,
-                            0
-                        );
-                        if (read_size <= 0) {
-                            break; // out of while (read_size > 0)
-                        }
-
-                        client_message[read_size-1] = '\0';
-                        char key_str[32];
-                        strncpy(key_str, client_message, read_size);
-                        // we copy over `read_size` chars to include the NUL terminator
-                        int key = atoi(key_str);
-                        const char *value = database[key];
-
-                        dprintf(new_socketfd, "Requested value: \"%*s\"\n",
-                            (int)strlen(value), value);
-
-                        break; // from case 'RWCDE'
-                    }
-                    */
                 default:
                     continue; // while loop
 
