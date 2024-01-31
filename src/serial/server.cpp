@@ -84,7 +84,7 @@ int main(int argc, char *argv[])
 
         // 5A. Send data to client
         const char *message = "Hello connection! Enter something:\n";
-        send(new_socketfd, message, std::std::strlen(message), 0);
+        send(new_socketfd, message, std::strlen(message), 0);
 
 
         // 5B. Receive data from client
@@ -117,14 +117,12 @@ int main(int argc, char *argv[])
                 NULL
             };
 
+            static std::string key;
+            static std::string value;
+
             char first_char = client_message[0];
             switch (first_char)
             {
-
-                char key_str[32];
-                int key;
-                const char *value;
-
                 case 'R':
                     if (std::strcmp(client_message, "READ") == 0) {
                         read_size = recv(
@@ -137,13 +135,11 @@ int main(int argc, char *argv[])
                             break; // out of switch => goes to if (read_size) ...
                         }
                         client_message[read_size-1] = '\0';
-                        std::strncpy(key_str, client_message, read_size);
-                        // we copy over `read_size` chars to include the NUL terminator
-                        key = atoi(key_str);
-                        value = database[key];
+                        key = client_message;
+                        value = KV_DATASTORE[key];
 
                         dprintf(new_socketfd, "Requested value: \"%*s\"\n",
-                            (int)std::std::strlen(value), value);
+                            (int)value.length(), value.c_str());
                     }
                     break; // out of switch
 
@@ -159,9 +155,7 @@ int main(int argc, char *argv[])
                             break; // out of switch => goes to if (read_size) ...
                         }
                         client_message[read_size-1] = '\0';
-                        std::strncpy(key_str, client_message, read_size);
-                        // we copy over `read_size` chars to include the NUL terminator
-                        key = atoi(key_str);
+                        key = client_message;
 
                         // Reading value to be written to key
                         read_size = recv(
@@ -180,16 +174,7 @@ int main(int argc, char *argv[])
                             continue; // while loop
                         }
                         value = client_message + 1; // skip the ':'
-                        int value_len = std::std::strlen(value);
-                        // Copy only (MAX_VALUE_LEN-1) bytes to database
-                        std::strncpy(database[key], value, MAX_VALUE_LEN-1);
-
-                        if (value_len < MAX_VALUE_LEN) {
-                            // Set byte after copied bytes to NUL
-                            database[key][value_len] = '\0';
-                        }
-                        // Set last byte to NUL terminator as well
-                        database[key][MAX_VALUE_LEN-1] = '\0';
+                        KV_DATASTORE[key] = value;
                     }
                     break; // out of switch
 
