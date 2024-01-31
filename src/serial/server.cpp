@@ -136,7 +136,19 @@ int main(int argc, char *argv[])
                         }
                         client_message[read_size-1] = '\0';
                         key = client_message;
-                        value = KV_DATASTORE[key];
+                        // Do **NOT** use ```value = KV_DATASTORE[key]```
+                        // for idempotent reads! If the specified key does not exist,
+                        //it inserts it (in this case, with value `""`).
+
+                        // it => std::unordered_map<std::string, std::string>::iterator
+                        //    => decltype(KV_DATASTORE)::iterator
+                        //    => auto
+                        value = "";
+                        decltype(KV_DATASTORE)::iterator it = KV_DATASTORE.find(key);
+                        if (it != KV_DATASTORE.end()) {
+                            // Key found in umap
+                            value = it->second;
+                        }
 
                         dprintf(new_socketfd, "Requested value: \"%*s\"\n",
                             (int)value.length(), value.c_str());
@@ -175,11 +187,17 @@ int main(int argc, char *argv[])
                         }
                         value = client_message + 1; // skip the ':'
                         KV_DATASTORE[key] = value;
+                        dprintf(new_socketfd, "Wrote to key \"%*s\"\n",
+                            (int)key.length(), key.c_str()
+                        );
                     }
                     break; // out of switch
 
                 case 'C':
                     if (std::strcmp(client_message, "COUNT") == 0) {
+                        // Send no. of key-value pairs in `KV_DATASTORE`
+                        dprintf(new_socketfd, "No. of key-value pairs: %lu\n",
+                            KV_DATASTORE.size());
                     }
                     break; // out of switch
 
