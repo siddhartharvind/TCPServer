@@ -144,14 +144,14 @@ int main(int argc, char *argv[])
                         // it => std::unordered_map<std::string, std::string>::iterator
                         //    => decltype(KV_DATASTORE)::iterator
                         //    => auto
-                        value = "";
+
+                        value = "NULL"; // if key not found
                         decltype(KV_DATASTORE)::iterator it = KV_DATASTORE.find(key);
                         if (it != KV_DATASTORE.end()) {
                             // Key found in umap
                             value = it->second;
                         }
-
-                        dprintf(new_socketfd, "Requested value: \"%*s\"\n",
+                        dprintf(new_socketfd, "%*s\n",
                             (int)value.length(), value.c_str());
                     }
                     break; // out of switch
@@ -188,17 +188,17 @@ int main(int argc, char *argv[])
                         }
                         value = client_message + 1; // skip the ':'
                         KV_DATASTORE[key] = value;
-                        dprintf(new_socketfd, "Wrote to key \"%*s\"\n",
-                            (int)key.length(), key.c_str()
-                        );
+
+                        // Server responds with `FIN` after WRITE
+                        std::string resp = "FIN\n";
+                        send(new_socketfd, resp.c_str(), resp.length(), 0);
                     }
                     break; // out of switch
 
                 case 'C':
                     if (std::strcmp(client_message, "COUNT") == 0) {
                         // Send no. of key-value pairs in `KV_DATASTORE`
-                        dprintf(new_socketfd, "No. of key-value pairs: %lu\n",
-                            KV_DATASTORE.size());
+                        dprintf(new_socketfd, "%ld\n", KV_DATASTORE.size());
                     }
                     break; // out of switch
 
@@ -217,13 +217,13 @@ int main(int argc, char *argv[])
                         key = client_message;
                         auto key_found = KV_DATASTORE.erase(key);
                         // .erase():
-                        //  takes     returns the no. of keys erased
+                        //  takes key as argument, returns no. of keys erased
                         if (key_found) {
-                            dprintf(new_socketfd, "Deleted key \"%*s\"\n",
-                                (int)key.length(), key.c_str());
+                            value = "FIN\n";
                         } else {
-                            dprintf(new_socketfd, "Key not found.\n");
+                            value = "NULL\n";
                         }
+                        send(new_socketfd, value.c_str(), value.size(), 0);
                     }
                     break; // out of switch
 
