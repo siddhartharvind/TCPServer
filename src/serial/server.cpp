@@ -1,3 +1,11 @@
+/* 
+ * A singlethreaded TCP echo server 
+ * Usage: tcpserver <port>
+ * 
+ * Testing:
+ * nc localhost <port> < input.txt
+ */
+
 #include <arpa/inet.h>
 #include <cstdio>
 #include <cstdlib>
@@ -11,6 +19,17 @@
 
 int main(int argc, char *argv[])
 {
+    int portno; /* Port to listen on */
+    /* 
+    * Check command line arguments
+    */
+    if (argc != 2) {
+        std::fprintf(stderr, "Usage: %s <port>\n", argv[0]);
+        std::exit(EXIT_FAILURE);
+    }
+
+    // Server port number taken as command line argument
+    portno = std::atoi(argv[1]);
 
     static std::unordered_map<std::string, std::string> KV_DATASTORE;
 
@@ -40,7 +59,7 @@ int main(int argc, char *argv[])
 
     // Prepare the structure
     server.sin_family      = AF_INET;
-    server.sin_port        = htons( 8888 );
+    server.sin_port        = htons( portno );
     server.sin_addr.s_addr = inet_addr("127.0.0.1");
     // The above binds the server to localhost. This means
     // that we can only connect to the server from the local
