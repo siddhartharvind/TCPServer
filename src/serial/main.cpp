@@ -108,11 +108,12 @@ accept_connections:
         // Receive data from client
         std::string client_message { "" };
         int read_size;
-        size_t end_pos = 0;
+        // size_t end_pos = 0;
 
         const std::string END_MESSAGE = "END\r\n";
 
-        while (client_message.find("END", end_pos) == std::string::npos)
+        // while (client_message.find("END", end_pos) == std::string::npos)
+        while (client_message.find("END") == std::string::npos)
         {
             char buffer[255];
             read_size = recv(client_sock, &buffer, sizeof(buffer), 0);
@@ -131,7 +132,7 @@ accept_connections:
             }
 
             client_message += std::string(buffer, read_size);
-            end_pos += client_message.length() - END_MESSAGE.length();
+            // end_pos += client_message.length() - END_MESSAGE.length();
         }
 
         std::istringstream input { client_message };
