@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <netinet/in.h>
+#include <sstream>
 #include <string>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -34,20 +35,20 @@ int main(int argc, char *argv[])
     static std::unordered_map<std::string, std::string> KV_DATASTORE;
 
     // 1. Create a socket
-    int socket_fd = socket(
+    int server_sock = socket(
         AF_INET,     /* domain: IPv4 */
         SOCK_STREAM, /* type: TCP */
         0            /* protocol: choose automatically 
                         based on `domain` and `type`   */
     );
 
-    if (socket_fd < 0)
+    if (server_sock < 0)
     {
         std::perror("ERROR: Could not create socket");
         std::exit(EXIT_FAILURE);
     }
 
-    std::printf("Socket successfully created: %d\n", socket_fd);
+    std::printf("Socket successfully created: %d\n", server_sock);
 
 
 
@@ -66,7 +67,7 @@ int main(int argc, char *argv[])
     // machine. To allow connecting from any interface:
     // server.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    if (bind(socket_fd, (struct sockaddr *)&server, sizeof server) < 0)
+    if (bind(server_sock, (struct sockaddr *)&server, sizeof server) < 0)
     {
         std::perror("ERROR: Failed to bind socket");
         std::exit(EXIT_FAILURE);
@@ -77,7 +78,7 @@ int main(int argc, char *argv[])
 
 
     // 3. Listen for connections
-    if (listen(socket_fd, 5) < 0)
+    if (listen(server_sock, 5) < 0)
     {
         std::perror("ERROR: Server unable to listen on port");
         std::exit(EXIT_FAILURE);
@@ -91,71 +92,73 @@ int main(int argc, char *argv[])
     struct sockaddr_in client_addr;
     socklen_t client_socklen = sizeof client_addr;
 
-    int new_socketfd;
-    while ((new_socketfd = accept(
-        socket_fd,
+    int client_sock;
+
+accept_connections:
+    while ((client_sock = accept(
+        server_sock,
         (struct sockaddr *)&client_addr,
         &client_socklen
     )) > 0)
     {
 
-        std::printf("Connection with %d successfully established!\n", new_socketfd);
+        std::printf("Connection with %d successfully established!\n", client_sock);
 
 
-        // 5A. Send data to client
-        const char *message = "Hello connection! Enter something:\n";
-        send(new_socketfd, message, std::strlen(message), 0);
-
-
-        // 5B. Receive data from client
-        char client_message[255];
+        // Receive data from client
+        std::string client_message { "" };
         int read_size;
+        size_t end_pos = 0;
 
-        while ((read_size = recv(
-            new_socketfd,
-            &client_message,
-            sizeof client_message,
-            0
-        )) > 0)
+        const std::string END_MESSAGE = "END\r\n";
+
+        while (client_message.find("END", end_pos) == std::string::npos)
         {
+            char buffer[255];
+            read_size = recv(client_sock, &buffer, sizeof(buffer), 0);
 
-            if (read_size == 1) {
-                // Only character read is '\n'
-                // No need for further action.
-                continue; // while loop
+            if (read_size == 0)
+            {
+                // No data sent (e.g. Ctrl+C)
+                std::puts("Client disconnected.");
+                std::fflush(stdout);
+                goto accept_connections;
+            }
+            else if (read_size < 0)
+            {
+                std::perror("ERROR: recv() failed");
+                std::exit(EXIT_FAILURE);
             }
 
-            // Zero out '\n' character at position (read_size-1)
-            client_message[read_size-1] = '\0';
+            client_message += std::string(buffer, read_size);
+            end_pos += client_message.length() - END_MESSAGE.length();
+        }
 
-            static const char *const commands[] = {
-                "READ",
-                "WRITE",
-                "COUNT",
-                "DELETE",
-                "END",
-                NULL
-            };
+        std::istringstream input { client_message };
+        std::ostringstream reply;
 
-            static std::string key;
-            static std::string value;
+        static const char *const commands[] = {
+            "READ",
+            "WRITE",
+            "COUNT",
+            "DELETE",
+            "END",
+            NULL
+        };
 
-            char first_char = client_message[0];
+        std::string command;
+        std::string key;
+        std::string value;
+
+        while (input >> command)
+        {
+            char first_char = command[0];
             switch (first_char)
             {
                 case 'R':
-                    if (std::strcmp(client_message, "READ") == 0) {
-                        read_size = recv(
-                            new_socketfd,
-                            &client_message,
-                            sizeof client_message,
-                            0
-                        );
-                        if (read_size <= 0) {
-                            break; // out of switch => goes to if (read_size) ...
-                        }
-                        client_message[read_size-1] = '\0';
-                        key = client_message;
+                    if (command == "READ") {
+                        input >> key;
+
                         // Do **NOT** use ```value = KV_DATASTORE[key]```
                         // for idempotent reads! If the specified key does not exist,
                         //it inserts it (in this case, with value `""`).
@@ -170,70 +173,39 @@ int main(int argc, char *argv[])
                             // Key found in umap
                             value = it->second;
                         }
-                        dprintf(new_socketfd, "%*s\n",
-                            (int)value.length(), value.c_str());
+                        reply << value << '\n';
                     }
                     break; // out of switch
 
                 case 'W':
-                    if (std::strcmp(client_message, "WRITE") == 0) {
-                        read_size = recv(
-                            new_socketfd,
-                            &client_message,
-                            sizeof client_message,
-                            0
-                        );
-                        if (read_size <= 0) {
-                            break; // out of switch => goes to if (read_size) ...
-                        }
-                        client_message[read_size-1] = '\0';
-                        key = client_message;
+                    if (command == "WRITE") {
+                        input >> key;
+                        input >> value;
 
-                        // Reading value to be written to key
-                        read_size = recv(
-                            new_socketfd,
-                            &client_message,
-                            sizeof client_message,
-                            0
-                        );
-                        if (read_size <= 0) {
-                            break; // out of switch => goes to if (read_size) ...
-                        }
-                        client_message[read_size-1] = '\0';
-                        if (client_message[0] != ':' ) {
+                        if (value[0] != ':' ) {
                             // start of value indicated by ':'
                             // format <KEY><newline>:<VALUE><newline>
                             continue; // while loop
                         }
-                        value = client_message + 1; // skip the ':'
+
+                        value.erase(0, 1); // skip the ':'
                         KV_DATASTORE[key] = value;
 
                         // Server responds with `FIN` after WRITE
-                        std::string resp = "FIN\n";
-                        send(new_socketfd, resp.c_str(), resp.length(), 0);
+                        reply << "FIN\n";
                     }
                     break; // out of switch
 
                 case 'C':
-                    if (std::strcmp(client_message, "COUNT") == 0) {
+                    if (command == "COUNT") {
                         // Send no. of key-value pairs in `KV_DATASTORE`
-                        dprintf(new_socketfd, "%ld\n", KV_DATASTORE.size());
+                        reply << KV_DATASTORE.size() << '\n';
                     }
                     break; // out of switch
 
                 case 'D':
-                    if (std::strcmp(client_message, "DELETE") == 0) {
-                        read_size = recv(
-                            new_socketfd,
-                            &client_message,
-                            sizeof client_message,
-                            0
-                        );
-                        if (read_size <= 0) {
-                            break; // out of switch => goes to if (read_size) ...
-                        }
-                        client_message[read_size-1] = '\0';
-                        key = client_message;
+                    if (command == "DELETE") {
+                        input >> key;
                         auto key_found = KV_DATASTORE.erase(key);
                         // .erase():
                         //  takes key as argument, returns no. of keys erased
@@ -242,50 +214,30 @@ int main(int argc, char *argv[])
                         } else {
                             value = "NULL\n";
                         }
-                        send(new_socketfd, value.c_str(), value.size(), 0);
+                        reply << value;
                     }
                     break; // out of switch
 
                 case 'E':
-                    if (std::strcmp(client_message, "END") == 0) {
+                    if (command == "END") {
+                        // Dispatch complete reply to client
+                        send(client_sock, reply.str().c_str(), reply.str().length(), 0);
 
                         // Close the client socket FD.
-                        if (close(new_socketfd) < 0) {
+                        if (close(client_sock) < 0) {
                             std::perror("ERROR: close() on client");
                             std::exit(EXIT_FAILURE);
                         }
-                        read_size = 0; // for the `if` at label `after_recv:`
-                        goto after_recv;
-                        // break;
-                        // No break needed here as the `goto` makes the PC
-                        // jump out of the `while(recv())` loop itself.
                     }
 
                 default:
                     continue; // while loop
 
             } // end switch
-        } // end while(recv())
-
-    after_recv:
-        if (read_size == 0)
-        {
-            std::puts("Client disconnected.");
-            std::fflush(stdout);
-        }
-        else if (read_size < 0)
-        {
-            std::perror("ERROR: recv() failed");
-            std::exit(EXIT_FAILURE);
-        }
-
-        // The server will remain in the `accept()` while loop
-        // even after a client ends its connection and control
-        // reaches this point.
-
+        } // end while(input >> command)
     } // end `while(accept())`
 
-    if (new_socketfd < 0)
+    if (client_sock < 0)
     {
         std::perror("ERROR: Server failed to accept connection");
         std::exit(EXIT_FAILURE);
