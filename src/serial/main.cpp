@@ -221,8 +221,12 @@ accept_connections:
 
                 case 'E':
                     if (command == "END") {
+                        // Final newline for test cases
+                        reply << '\n';
+
                         // Dispatch complete reply to client
-                        send(client_sock, reply.str().c_str(), reply.str().length(), 0);
+                        size_t reply_len = reply.str().length();
+                        send(client_sock, reply.str().c_str(), reply_len, 0);
 
                         // Close the client socket FD.
                         if (close(client_sock) < 0) {
