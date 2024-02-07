@@ -25,8 +25,10 @@
 static std::unordered_map<std::string, std::string> KV_DATASTORE;
 
 
-void handle_connection(int client_sock)
+void *handle_connection(void *sock)
 {
+    int client_sock = *(int *)sock;
+
     std::printf("Connection with %d successfully established!\n", client_sock);
 
     // Receive data from client
@@ -47,7 +49,7 @@ void handle_connection(int client_sock)
             // No data sent (e.g. Ctrl+C)
             std::puts("Client disconnected.");
             std::fflush(stdout);
-            return;
+            return NULL;
         }
         else if (read_size < 0)
         {
@@ -165,7 +167,7 @@ void handle_connection(int client_sock)
         } // end switch
     } // end while(input >> command)
     
-    return;
+    return NULL;
 }
 
 
@@ -248,7 +250,16 @@ int main(int argc, char *argv[])
         &client_socklen
     )) > 0)
     {
-        handle_connection(client_sock);
+        // handle_connection(client_sock);
+
+        pthread_t client_thread;
+        pthread_create(
+            &client_thread,
+            NULL,
+            handle_connection,
+            (void *)&client_sock
+        );
+        pthread_join(client_thread, NULL);
     }
 
     if (client_sock < 0)
