@@ -23,6 +23,7 @@
 // Global variable
 // Probably not good practice, but easier for the time being
 static std::unordered_map<std::string, std::string> KV_DATASTORE;
+static pthread_mutex_t MUTEX_FOR_KV_DATASTORE;
 
 
 void *handle_connection(void *sock)
@@ -63,15 +64,6 @@ void *handle_connection(void *sock)
 
     std::istringstream input { client_message };
     std::ostringstream reply;
-
-    static const char *const commands[] = {
-        "READ",
-        "WRITE",
-        "COUNT",
-        "DELETE",
-        "END",
-        NULL
-    };
 
     std::string command;
     std::string key;
@@ -116,7 +108,18 @@ void *handle_connection(void *sock)
                     }
 
                     value.erase(0, 1); // skip the ':'
+
+                    //////////////////////
+                    // Critical Section //
+                    //////////////////////
+                    pthread_mutex_lock(&MUTEX_FOR_KV_DATASTORE);
+
                     KV_DATASTORE[key] = value;
+
+                    /////////////////////////////
+                    // End of Critical Section //
+                    /////////////////////////////
+                    pthread_mutex_unlock(&MUTEX_FOR_KV_DATASTORE);
 
                     // Server responds with `FIN` after WRITE
                     reply << "FIN\n";
@@ -133,7 +136,20 @@ void *handle_connection(void *sock)
             case 'D':
                 if (command == "DELETE") {
                     input >> key;
+
+
+                    //////////////////////
+                    // Critical Section //
+                    //////////////////////
+                    pthread_mutex_lock(&MUTEX_FOR_KV_DATASTORE);
+
                     auto key_found = KV_DATASTORE.erase(key);
+
+                    /////////////////////////////
+                    // End of Critical Section //
+                    /////////////////////////////
+                    pthread_mutex_unlock(&MUTEX_FOR_KV_DATASTORE);
+
                     // .erase():
                     //  takes key as argument, returns no. of keys erased
                     if (key_found) {
@@ -159,6 +175,7 @@ void *handle_connection(void *sock)
                         std::perror("ERROR: close() on client");
                         std::exit(EXIT_FAILURE);
                     }
+                    return NULL;
                 }
 
             default:
@@ -166,7 +183,6 @@ void *handle_connection(void *sock)
 
         } // end switch
     } // end while(input >> command)
-    
     return NULL;
 }
 
@@ -244,6 +260,12 @@ int main(int argc, char *argv[])
 
     int client_sock;
 
+    // We initialize the mutex variable that we will use to lock the
+    // critical section of the threads (`WRITE` and `DELETE` commands).
+    // The variable **MUST** be initialized before use, and **MUST** be
+    // ultimately destroyed.
+    pthread_mutex_init(&MUTEX_FOR_KV_DATASTORE, NULL);
+
     while ((client_sock = accept(
         server_sock,
         (struct sockaddr *)&client_addr,
@@ -267,6 +289,9 @@ int main(int argc, char *argv[])
         std::perror("ERROR: Server failed to accept connection");
         std::exit(EXIT_FAILURE);
     }
+
+    // Necessary to ultimately destroy the mutex.
+    pthread_mutex_destroy(&MUTEX_FOR_KV_DATASTORE);
 
     return EXIT_SUCCESS;
 }
