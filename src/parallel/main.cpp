@@ -26,9 +26,9 @@ static std::unordered_map<std::string, std::string> KV_DATASTORE;
 static pthread_mutex_t MUTEX_FOR_KV_DATASTORE;
 
 
-void *handle_connection(void *sock)
+void *handle_connection(void *p_client_sock)
 {
-    int client_sock = *(int *)sock;
+    int client_sock = *(int *)p_client_sock;
 
     std::printf("Connection with %d successfully established!\n", client_sock);
 
@@ -110,7 +110,7 @@ void *handle_connection(void *sock)
                     value.erase(0, 1); // skip the ':'
 
                     //////////////////////
-                    // Critical Section //
+                    // Start of Critical Section //
                     //////////////////////
                     pthread_mutex_lock(&MUTEX_FOR_KV_DATASTORE);
 
@@ -139,7 +139,7 @@ void *handle_connection(void *sock)
 
 
                     //////////////////////
-                    // Critical Section //
+                    // Start of Critical Section //
                     //////////////////////
                     pthread_mutex_lock(&MUTEX_FOR_KV_DATASTORE);
 
@@ -175,6 +175,7 @@ void *handle_connection(void *sock)
                         std::perror("ERROR: close() on client");
                         std::exit(EXIT_FAILURE);
                     }
+                    std::free(p_client_sock);
                 }
 
             default:
@@ -233,6 +234,18 @@ int main(int argc, char *argv[])
     // machine. To allow connecting from any interface:
     // server.sin_addr.s_addr = htonl(INADDR_ANY);
 
+
+    // Prevents `bind()` from throwing an error by saying "Address already in use"
+    // Normally, the socket is still associated with the old connection for a
+    // short period before it is available for use again.
+    // This setting is useful during development.
+    int yes = 1;
+    if (setsockopt(server_sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)))
+    {
+        std::perror("ERROR: setsockopt()");
+        std::exit(EXIT_FAILURE);
+    }
+
     if (bind(server_sock, (struct sockaddr *)&server, sizeof server) < 0)
     {
         std::perror("ERROR: Failed to bind socket");
@@ -274,24 +287,30 @@ int main(int argc, char *argv[])
 
     while (1)
     {
-        // handle_connection(client_sock);
-        client_sock = accept(
+        int *p_client_sock = static_cast<int*>(std::malloc(sizeof(int)));
+        *p_client_sock = accept(
             server_sock,
             (struct sockaddr *)&client_addr,
             &client_socklen
         );
-        if (client_sock < 0)
-        {
-            std::perror("ERROR: Server failed to accept connection");
-            continue; // return to accepting other connections
+
+        if (*p_client_sock < 0) {
+            std::perror("ERROR: accept()");
+            std::free(p_client_sock);
+            continue;
         }
 
-        pthread_create(
+        if (pthread_create(
             &client_thread,
             &attr,
             handle_connection,
-            (void *)&client_sock
-        );
+            (void *)p_client_sock
+        ) < 0)
+        {
+            std::perror("ERROR: Could not create thread");
+            std::free(p_client_sock);
+            continue;
+        }
     }
 
     // Necessary to ultimately destroy the mutex.
