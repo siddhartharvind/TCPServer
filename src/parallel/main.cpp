@@ -175,7 +175,6 @@ void *handle_connection(void *sock)
                         std::perror("ERROR: close() on client");
                         std::exit(EXIT_FAILURE);
                     }
-                    return NULL;
                 }
 
             default:
@@ -183,7 +182,7 @@ void *handle_connection(void *sock)
 
         } // end switch
     } // end while(input >> command)
-    return NULL;
+    pthread_exit(NULL);
 }
 
 
@@ -260,34 +259,36 @@ int main(int argc, char *argv[])
 
     int client_sock;
 
+    pthread_t client_thread;
+
     // We initialize the mutex variable that we will use to lock the
     // critical section of the threads (`WRITE` and `DELETE` commands).
     // The variable **MUST** be initialized before use, and **MUST** be
     // ultimately destroyed.
     pthread_mutex_init(&MUTEX_FOR_KV_DATASTORE, NULL);
 
-    while ((client_sock = accept(
-        server_sock,
-        (struct sockaddr *)&client_addr,
-        &client_socklen
-    )) > 0)
+    while (1)
     {
         // handle_connection(client_sock);
+        client_sock = accept(
+            server_sock,
+            (struct sockaddr *)&client_addr,
+            &client_socklen
+        );
+        if (client_sock < 0)
+        {
+            std::perror("ERROR: Server failed to accept connection");
+            continue; // return to accepting other connections
+        }
 
-        pthread_t client_thread;
         pthread_create(
             &client_thread,
             NULL,
             handle_connection,
             (void *)&client_sock
         );
-        pthread_join(client_thread, NULL);
-    }
-
-    if (client_sock < 0)
-    {
-        std::perror("ERROR: Server failed to accept connection");
-        std::exit(EXIT_FAILURE);
+        pthread_detach(client_thread);
+        // pthread_join(client_thread, NULL);
     }
 
     // Necessary to ultimately destroy the mutex.
