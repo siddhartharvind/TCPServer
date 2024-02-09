@@ -260,6 +260,11 @@ int main(int argc, char *argv[])
     int client_sock;
 
     pthread_t client_thread;
+    pthread_attr_t attr;
+
+    // Setting the client threads created with this `attr` to be detached.
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
     // We initialize the mutex variable that we will use to lock the
     // critical section of the threads (`WRITE` and `DELETE` commands).
@@ -283,16 +288,16 @@ int main(int argc, char *argv[])
 
         pthread_create(
             &client_thread,
-            NULL,
+            &attr,
             handle_connection,
             (void *)&client_sock
         );
-        pthread_detach(client_thread);
-        // pthread_join(client_thread, NULL);
     }
 
     // Necessary to ultimately destroy the mutex.
     pthread_mutex_destroy(&MUTEX_FOR_KV_DATASTORE);
+
+    pthread_attr_destroy(&attr);
 
     return EXIT_SUCCESS;
 }
