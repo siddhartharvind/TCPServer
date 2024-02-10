@@ -12,6 +12,7 @@
 #include <cstring>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <queue>
 #include <sstream>
 #include <string>
 #include <sys/socket.h>
@@ -19,17 +20,20 @@
 #include <unordered_map>
 
 
-
-// Global variable
+// Global variables
 // Probably not good practice, but easier for the time being
 static std::unordered_map<std::string, std::string> KV_DATASTORE;
-static pthread_mutex_t MUTEX_FOR_KV_DATASTORE;
+static pthread_mutex_t MUTEX_FOR_KV_DATASTORE = PTHREAD_MUTEX_INITIALIZER;
 
+static std::queue<int> client_queue;
+static pthread_mutex_t MUTEX_FOR_CLIENT_QUEUE = PTHREAD_MUTEX_INITIALIZER;
 
-void *handle_connection(void *p_client_sock)
+#if !defined NUM_THREADS
+# define NUM_THREADS 5
+#endif
+
+void handle_connection(int client_sock)
 {
-    int client_sock = *(int *)p_client_sock;
-
     std::printf("Connection with %d successfully established!\n", client_sock);
 
     // Receive data from client
@@ -50,7 +54,7 @@ void *handle_connection(void *p_client_sock)
             // No data sent (e.g. Ctrl+C)
             std::puts("Client disconnected.");
             std::fflush(stdout);
-            return NULL;
+            return;
         }
         else if (read_size < 0)
         {
@@ -109,9 +113,9 @@ void *handle_connection(void *p_client_sock)
 
                     value.erase(0, 1); // skip the ':'
 
-                    //////////////////////
+                    ///////////////////////////////
                     // Start of Critical Section //
-                    //////////////////////
+                    ///////////////////////////////
                     pthread_mutex_lock(&MUTEX_FOR_KV_DATASTORE);
 
                     KV_DATASTORE[key] = value;
@@ -138,9 +142,9 @@ void *handle_connection(void *p_client_sock)
                     input >> key;
 
 
-                    //////////////////////
+                    ///////////////////////////////
                     // Start of Critical Section //
-                    //////////////////////
+                    ///////////////////////////////
                     pthread_mutex_lock(&MUTEX_FOR_KV_DATASTORE);
 
                     auto key_found = KV_DATASTORE.erase(key);
@@ -175,7 +179,6 @@ void *handle_connection(void *p_client_sock)
                         std::perror("ERROR: close() on client");
                         std::exit(EXIT_FAILURE);
                     }
-                    std::free(p_client_sock);
                 }
 
             default:
@@ -183,6 +186,30 @@ void *handle_connection(void *p_client_sock)
 
         } // end switch
     } // end while(input >> command)
+}
+
+
+
+void *thread_function(void *unused)
+{
+    while (1)
+    {
+        // Lock queue access with the mutex
+        pthread_mutex_lock(&MUTEX_FOR_CLIENT_QUEUE);
+        if (!client_queue.empty())
+        {
+            // Pop client from queue to start serving it
+            int client_sock = client_queue.front();
+            client_queue.pop();
+            pthread_mutex_unlock(&MUTEX_FOR_CLIENT_QUEUE);
+
+            // Call the function handling the client connection
+            handle_connection(client_sock);
+        }
+        else {
+            pthread_mutex_unlock(&MUTEX_FOR_CLIENT_QUEUE);
+        }
+    }
     pthread_exit(NULL);
 }
 
@@ -201,7 +228,7 @@ int main(int argc, char *argv[])
     // Server port number taken as command line argument
     portno = std::atoi(argv[1]);
 
-    // 1. Create a socket
+    // Create a socket
     int server_sock = socket(
         AF_INET,     /* domain: IPv4 */
         SOCK_STREAM, /* type: TCP */
@@ -219,7 +246,7 @@ int main(int argc, char *argv[])
 
 
 
-    // 2. Bind socket to port/address
+    // Bind socket to port/address
     struct sockaddr_in server;
 
     // Zero out the struct
@@ -256,7 +283,7 @@ int main(int argc, char *argv[])
 
 
 
-    // 3. Listen for connections
+    // Listen for connections
     if (listen(server_sock, 5) < 0)
     {
         std::perror("ERROR: Server unable to listen on port");
@@ -266,28 +293,32 @@ int main(int argc, char *argv[])
     std::puts("Server successfully listening!\nWaiting for incoming connections...");
 
 
-    // 4. Accept connections
+    // Accept connections
     struct sockaddr_in client_addr;
-    socklen_t client_socklen = sizeof client_addr;
-
-    int client_sock;
-
-    pthread_t client_thread;
-    pthread_attr_t attr;
+    socklen_t          client_socklen = sizeof client_addr;
+    int                client_sock;
 
     // Setting the client threads created with this `attr` to be detached.
+    pthread_attr_t attr;
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-    // We initialize the mutex variable that we will use to lock the
-    // critical section of the threads (`WRITE` and `DELETE` commands).
-    // The variable **MUST** be initialized before use, and **MUST** be
-    // ultimately destroyed.
-    pthread_mutex_init(&MUTEX_FOR_KV_DATASTORE, NULL);
+    // Creating and initializing array of N Pthreads
+    pthread_t threads[NUM_THREADS];
+    for (int i = 0; i < NUM_THREADS; ++i) {
+        pthread_create(
+            &threads[i],
+            NULL,
+            &thread_function,
+            &attr
+        );
+    }
+
 
     while (1)
     {
         int *p_client_sock = static_cast<int*>(std::malloc(sizeof(int)));
+        // Accept new incoming client
         *p_client_sock = accept(
             server_sock,
             (struct sockaddr *)&client_addr,
@@ -300,21 +331,19 @@ int main(int argc, char *argv[])
             continue;
         }
 
-        if (pthread_create(
-            &client_thread,
-            &attr,
-            handle_connection,
-            (void *)p_client_sock
-        ) < 0)
-        {
-            std::perror("ERROR: Could not create thread");
-            std::free(p_client_sock);
-            continue;
-        }
+        // Add new client to queue
+        pthread_mutex_lock(&MUTEX_FOR_CLIENT_QUEUE);
+        client_queue.push(*p_client_sock);
+        pthread_mutex_unlock(&MUTEX_FOR_CLIENT_QUEUE);
     }
 
-    // Necessary to ultimately destroy the mutex.
+
+    // Necessary to ultimately destroy the mutexes. Note that one must
+    // initialize a mutex before using it; not doing so is Undefined
+    // Behaviour (UB). Destroying the mutex at the end of use is required to
+    // be done as part of the Pthreads API.
     pthread_mutex_destroy(&MUTEX_FOR_KV_DATASTORE);
+    pthread_mutex_destroy(&MUTEX_FOR_CLIENT_QUEUE);
 
     pthread_attr_destroy(&attr);
 
