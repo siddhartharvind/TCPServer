@@ -1,10 +1,13 @@
-# Multithreaded TCP Server 
+# Multithreaded TCP Server
 
-HP Assignement: PThreads
+HP Assignment: PThreads
 
 Build a multi-threaded server in C++, make use of PThreads for parallel programming.
 
 Get started by forking this repo!
+
+## Done by :
+### Name : Siddharth Arvind<br/>SRN &nbsp; &nbsp;: PES1UG21CS**594**
 
 ## Requirements
  - g++
