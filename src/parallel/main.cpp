@@ -1,30 +1,34 @@
 /* 
- * tcpserver.c - A multithreaded TCP echo server 
- * usage: tcpserver <port>
+ * A multithreaded TCP echo server
+ * Usage: tcpserver <port>
  * 
- * Testing : 
+ * Testing:
  * nc localhost <port> < input.txt
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string>
-#include <cstring>
-#include <pthread.h>
+// Server implementation
+#include "Tcp_Server.hpp"
+
+// C `std`-namespaced standard library headers
+#include <cstdio>
+#include <cstdlib>
 
 
-int main(int argc, char ** argv) {
-  int portno; /* port to listen on */
-  
-  /* 
-   * check command line arguments 
-   */
-  if (argc != 2) {
-    fprintf(stderr, "usage: %s <port>\n", argv[0]);
-    exit(1);
-  }
+int main(int argc, char *argv[])
+{
+    int portno; /* Port to listen on */
+    /*
+    * Check command line arguments
+    */
+    if (argc != 2) {
+        std::fprintf(stderr, "Usage: %s <port>\n", argv[0]);
+        std::exit(EXIT_FAILURE);
+    }
 
-  // DONE: Server port number taken as command line argument
-  portno = atoi(argv[1]);
+    // Server port number taken as command line argument
+    portno = std::atoi(argv[1]);
 
+    Tcp_Server server { portno };
+    server.start();
+    return EXIT_SUCCESS;
 }

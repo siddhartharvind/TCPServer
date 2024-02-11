@@ -15,12 +15,13 @@ test_parallel: parallel
 	PARALLEL=1 ./test.sh
 	killall parallel_server
 
-parallel: src/parallel/main.cpp
-	mkdir -p bin
-	g++ -std=c++11 -o bin/parallel_server -pthread -fno-stack-protector src/parallel/main.cpp
+parallel: src/parallel/main.cpp src/parallel/Tcp_Server.hpp
+  mkdir -p bin
+	cd src/parallel/ && $(MAKE)
 
 clean:
-	rm bin/*
+	cd src/parallel/ && $(MAKE) clean
+	-rm bin/*
 
 test: test_serial test_parallel
 	echo "Made test"
