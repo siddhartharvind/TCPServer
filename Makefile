@@ -16,7 +16,7 @@ test_parallel: parallel
 	killall parallel_server
 
 parallel: src/parallel/main.cpp src/parallel/Tcp_Server.hpp
-  mkdir -p bin
+	mkdir -p bin
 	cd src/parallel/ && $(MAKE)
 
 clean:
